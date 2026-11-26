@@ -1,1 +1,11 @@
-[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content -Raw "C:\Users\User\server.ps1")))
+Traceback (most recent call last):
+  File "C:\Users\User\client.py", line 84, in <module>
+    Viewer(sys.argv[1])
+  File "C:\Users\User\client.py", line 9, in __init__
+    self.sock = socket.create_connection((host, port))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\socket.py", line 850, in create_connection
+    raise exceptions[0]
+  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\socket.py", line 835, in create_connection
+    sock.connect(sa)
+ConnectionRefusedError: [WinError 10061] Подключение не установлено, т.к. конечный компьютер отверг запрос на подключение
