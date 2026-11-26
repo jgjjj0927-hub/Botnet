@@ -1,0 +1,1 @@
+[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content -Raw "C:\Users\User\server.ps1")))
