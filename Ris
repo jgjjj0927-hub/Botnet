@@ -1,1 +1,3 @@
-taskkill /f /im powershell.exe & taskkill /f /im cmd.exe /fi "WINDOWTITLE ne ultraunlock*" & netsh advfirewall firewall delete rule name="WC-IN" & netsh advfirewall firewall delete rule name="WC-OUT" & netsh advfirewall firewall delete rule name="WC-IN-UDP" & del /f /q "C:\Users\User\agent.bat" & del /f /q "C:\Users\User\server.ps1"
+[.ShellClassInfo]
+LocalizedResourceName=@%SystemRoot%\system32\windows.storage.dll,-21825
+IconResource=%SystemRoot%\system32\imageres.dll,-198
